@@ -29,7 +29,7 @@ import {
 
 const groq = new Groq({ apiKey: groqApiKey });
 
-async function parseRequirements(messages: string[]): Promise<Record<string, string>> {
+async function parseRequirements(messages: string[]): Promise<string> {
     const systemPrompt = `
     You are a helpful assistant that parses the details of the user's requirements from the conversation history.
     Given a conversation between a user and an agent, you will need to extract the details of the user's requirements.

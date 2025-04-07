@@ -93,7 +93,7 @@ const replyTweetFunction = new GameFunction({
         }
 
         // parse the response message
-        let workingMemory: Record<string, string> | null = null;
+        let workingMemory: string | null = null;
         if (response.functionCall) {
             workingMemory = await parseRequirements(chatHistory);
         }
