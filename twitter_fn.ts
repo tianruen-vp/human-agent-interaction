@@ -24,6 +24,9 @@ import TwitterPlugin, {
   GameTwitterClient,
 } from "@virtuals-protocol/game-twitter-plugin";
 
+import axios from 'axios';
+import { URLSearchParams } from 'url';
+
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -61,7 +64,7 @@ const replyTweetFunction = new GameFunction({
         console.log(cur_tweet);
         const tweetId = cur_tweet.id;
         const tweetAuthorId = cur_tweet.author_id;
-        const tweetAuthorName = curAgentState.includes.users.find(user => user.id === tweetAuthorId).name;
+        const tweetAuthorName = curAgentState.includes.users.find((user: any) => user.id === tweetAuthorId).name;
         const tweetText = filterTweetText(cur_tweet.text);
 
         if ("repliedTweetId" in curAgentState && curAgentState.repliedTweetId.includes(tweetId)) {
@@ -71,37 +74,23 @@ const replyTweetFunction = new GameFunction({
             );
         }
 
-        let chat: any;
-        if (!("activeChat" in curAgentState) || !(tweetAuthorId in curAgentState.activeChat)) {
-            chat = await twitterChatAgent.createChat({
-                partnerId: tweetAuthorId,
-                partnerName: tweetAuthorName,
-                actionSpace: [checkPaymentFunction, determinePriceFunction]
-            });
-        } else {
-            chat = chatDetails[tweetAuthorId];
-        }
+        const baseURL = 'http://127.0.0.1:8000';
+        const endpoint = '/get_chat';
+        const params = new URLSearchParams();
+        params.append('partner_id', tweetAuthorId);
+        params.append('partner_name', tweetAuthorName);
+        params.append('message', tweetText);
+        const url = `${baseURL}${endpoint}?${params.toString()}`;
 
-        const response = await chat.next(tweetText);
+        const response = await axios.get(url, {
+            headers: {
+                'accept': 'application/json',
+            },
+        });
 
         // reply to the tweet
         const responseTweet = await gameTwitterClient.reply(tweetId, response.message);
-        // record message into chat history
-        let chatHistory: string[] = [`User: ${tweetText}`, `Agent: ${response.message}`];
-        if ('chatHistory' in chat) {
-            chatHistory = [...chat.chatHistory, ...chatHistory];
-        }
-
-        // parse the response message
-        let workingMemory: string | null = null;
-        if (response.functionCall) {
-            workingMemory = await parseRequirements(chatHistory);
-        }
-
-        // update the chat details after chat.next()
-        chat.chatHistory = chatHistory;
-        chatDetails.tweetAuthorId = chat;
-
+        
         let feedback: string;
         if (response.isFinished) {
             delete chatDetails.tweetAuthorId;
@@ -121,11 +110,19 @@ const replyTweetFunction = new GameFunction({
             "repliedTweetId" : tweetId,
             "twitterAuthorId" : tweetAuthorId,
             "twitterAuthorName" : tweetAuthorName,
-            "response": response,
-            "workingMemory": workingMemory,
+            "response": true,
+            "workingMemory": response.data.working_memory,
+            "isFinished": response.data.is_finished.toString().toLowerCase() === "true",
+        }
+
+        if ('fn_name' in response.data) {
+            latestAgentState.fnName = response.data.fn_name;
+            latestAgentState.fnArgs = response.data.fn_args;
+            latestAgentState.feedbackMessage = response.data.feedback_message;
+            latestAgentState.info = response.data.info;
         }
         
-        updateAgentState(latestAgentState);
+        await updateAgentState(latestAgentState);
 
         return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Done,
